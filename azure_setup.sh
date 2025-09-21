@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Set your variables
+# Set your variable
 RESOURCE_GROUP_NAME="rg-webapp-deploy"
 ACR_NAME="acrwebapp$(date +%s | tail -c 6)"  # Creates unique name like acrwebapp123456
 LOCATION="eastus"
