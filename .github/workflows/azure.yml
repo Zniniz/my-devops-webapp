@@ -43,23 +43,20 @@ jobs:
           docker push "${FULL_IMAGE}"
           echo "FULL_IMAGE=${FULL_IMAGE}" >> "$GITHUB_ENV"
 
-      # Make a safe, always-present ACI name + DNS label
       - name: Create DNS-safe ACI name (lowercase, hyphenated)
         shell: bash
         run: |
           OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
-          REPO_LC="${GITHUB_REPOSITORY,,}"            # owner/repo
-          REPO_BASENAME="${REPO_LC##*/}"              # repo
-          # fallback if envs are ever empty
+          REPO_LC="${GITHUB_REPOSITORY,,}"
+          REPO_BASENAME="${REPO_LC##*/}"
           [ -z "$OWNER_LC" ] && OWNER_LC="ghuser"
           [ -z "$REPO_BASENAME" ] && REPO_BASENAME="app"
-          # compose and sanitize: only [a-z0-9-], max 63 chars
           NAME_RAW="${OWNER_LC}-${REPO_BASENAME}-web-${GITHUB_RUN_NUMBER}"
           NAME_SAN="${NAME_RAW//[^a-z0-9-]/-}"
           NAME_SAN="${NAME_SAN,,}"
           NAME_SAN="${NAME_SAN%-}"
           NAME_SAN="${NAME_SAN#-}"
-          ACI_NAME="${NAME_SAN:0:60}"                 # keep some room
+          ACI_NAME="${NAME_SAN:0:60}"
           echo "ACI_NAME=${ACI_NAME}" >> "$GITHUB_ENV"
           echo "DNS_LABEL=${ACI_NAME}" >> "$GITHUB_ENV"
           echo "Using ACI_NAME=${ACI_NAME}"
@@ -78,6 +75,8 @@ jobs:
               --dns-name-label "${{ env.DNS_LABEL }}" \
               --ports ${{ env.CONTAINER_PORT }} \
               --os-type Linux \
+              --cpu 1 \
+              --memory 1.5 \
               --location "${{ env.AZURE_REGION }}" \
               --restart-policy Always
 
