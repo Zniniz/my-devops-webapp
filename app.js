@@ -87,7 +87,7 @@ app.listen(PORT, () => {
 // // Simple home page
 // app.get('/', (req, res) => {
 //   res.send(`
-//     <h1>🚀 My DevOps Web App</h1>
+//     <h1>🚀 My Updated DevOps Web App</h1>
 //     <p>This app was deployed automatically!</p>
 //     <p>Current time: ${new Date().toLocaleString()}</p>
 //   `);
