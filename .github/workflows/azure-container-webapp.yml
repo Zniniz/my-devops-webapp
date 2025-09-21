@@ -1,4 +1,4 @@
-name: Build & Deploy to Azure Container Instances
+name: "Build & Deploy to Azure Container Instances"
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 env:
   IMAGE_NAME: my-webapp
   ACI_NAME: mywebapp-${{ github.run_number }}
+  AZURE_REGION: eastus
 
 jobs:
   build-and-push:
@@ -22,28 +23,28 @@ jobs:
 
       - name: Docker login to ACR
         run: |
-          echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ secrets.ACR_NAME }}.azurecr.io \
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_NAME }}.azurecr.io" \
             --username "${{ secrets.ACR_USERNAME }}" --password-stdin
 
       - name: Build & push image
         run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker build -t "${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}" .
+          docker push "${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
       - name: Deploy to ACI
         uses: azure/cli@v2
         with:
           inlineScript: |
             az container create \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --name ${{ env.ACI_NAME }} \
-              --image ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-              --registry-login-server ${{ secrets.ACR_NAME }}.azurecr.io \
-              --registry-username ${{ secrets.ACR_USERNAME }} \
-              --registry-password ${{ secrets.ACR_PASSWORD }} \
-              --dns-name-label ${{ env.ACI_NAME }} \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ env.ACI_NAME }}" \
+              --image "${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
+              --registry-login-server "${{ secrets.ACR_NAME }}.azurecr.io" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --dns-name-label "${{ env.ACI_NAME }}" \
               --ports 3001
 
       - name: Output URL
-        run: echo "Your app: http://${{ env.ACI_NAME }}.eastus.azurecontainer.io:3001"
+        run: echo "Your app: http://${{ env.ACI_NAME }}.${{ env.AZURE_REGION }}.azurecontainer.io:3001"
 
