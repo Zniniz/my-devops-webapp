@@ -1,46 +1,75 @@
-name: "Build and deploy to Azure Web App (GHCR)"
+name: Build and Deploy to Azure Container Instances
 
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
 
-env:
-  AZURE_WEBAPP_NAME: your-app-name  # <-- set to your Web App name
-  IMAGE_TAG: ${{ github.sha }}
+# Required repo secrets:
+# - AZURE_CREDENTIALS        (JSON from az ad sp create-for-rbac --sdk-auth)
+# - ACR_NAME                 (e.g., acrwebapp78018)
+# - ACR_USERNAME             (az acr credential show ... username)
+# - ACR_PASSWORD             (az acr credential show ... passwords[0].value)
+# - AZURE_RESOURCE_GROUP     (e.g., rg-webapp-deploy)
 
-permissions:
-  contents: read
-  packages: read   # needed to pull from GHCR in some orgs
+env:
+  IMAGE_NAME: my-webapp            # name for your image inside ACR
+  AZURE_REGION: eastus             # change if you deployed elsewhere
+  CONTAINER_PORT: "3001"           # your app's exposed port
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Log in to Azure
+        uses: azure/login@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build & push image to GHCR
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
-          file: ./Dockerfile
+      - name: Docker login to ACR
+        run: |
+          echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_NAME }}.azurecr.io" \
+            --username "${{ secrets.ACR_USERNAME }}" --password-stdin
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
+      - name: Build and Push image to ACR
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          FULL_IMAGE="${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          docker build -t "${FULL_IMAGE}" .
+          docker push "${FULL_IMAGE}"
+          echo "FULL_IMAGE=${FULL_IMAGE}" >> $GITHUB_ENV
+
+      - name: Create DNS-safe ACI name (lowercase)
+        shell: bash
+        run: |
+          REPO_OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          # ACI name & DNS label must be lowercase alphanumeric and hyphen
+          ACI_NAME="${REPO_OWNER_LC}-webapp-${GITHUB_RUN_NUMBER}"
+          echo "ACI_NAME=${ACI_NAME}" >> $GITHUB_ENV
+          echo "DNS_LABEL=${ACI_NAME}" >> $GITHUB_ENV
+
+      - name: Deploy to Azure Container Instances
+        uses: azure/cli@v2
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          images: ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
+          inlineScript: |
+            az container create \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ env.ACI_NAME }}" \
+              --image "${{ env.FULL_IMAGE }}" \
+              --registry-login-server "${{ secrets.ACR_NAME }}.azurecr.io" \
+              --registry-username "${{ secrets.ACR_USERNAME }}" \
+              --registry-password "${{ secrets.ACR_PASSWORD }}" \
+              --dns-name-label "${{ env.DNS_LABEL }}" \
+              --ports ${{ env.CONTAINER_PORT }} \
+              --location "${{ env.AZURE_REGION }}" \
+              --restart-policy Always
+
+      - name: Show App URL
+        run: |
+          echo "Your app should be reachable (once ACI is Running) at:"
+          echo "  http://${{ env.DNS_LABEL }}.${{ env.AZURE_REGION }}.azurecontainer.io:${{ env.CONTAINER_PORT }}"
 
